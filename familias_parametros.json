@@ -1,0 +1,141 @@
+{
+  "_descripcion": "Familias de parámetros combinables. REGLA: un grupo combinado solo se usa si TODOS sus miembros están en la cotización. Cada token tiene su grupo individual (solo). Cada parámetro pertenece a UNA sola familia.",
+
+  "familias": [
+
+    {
+      "id": "microbiologico_coliformes",
+      "individual_a_token": {
+        "Coliformes totales": "COLFEC",
+        "Coliformes fecales o termotolerantes (nmp)": "COLFEC",
+        "Escherichia coli": "ECOLI",
+        "Recuento de bacterias heterotrofas": "BACTHET",
+        "Colifagos (virus)": "VIRUS"
+      },
+      "tokens_a_grupo": {
+        "COLFEC": "COLIFORMES FECALES*-TOTALES*",
+        "ECOLI": "ESCHERICHIA COLI*",
+        "BACTHET": "BACTERIAS HETEROTROFAS*",
+        "VIRUS": "VIRUS*",
+        "COLFEC|ECOLI": "COLIF.TOTALES / FECALES - E.COLI",
+        "COLFEC|BACTHET": "COLIF.FECALES*/TOTALES* - BACT.HETEROTROFAS*",
+        "COLFEC|ECOLI|BACTHET": "COLIF.FECALES*/TOTALES* - E.COLI* - BACT.HETEROTROFAS*",
+        "COLFEC|ECOLI|BACTHET|VIRUS": "COLIF.FECALES*/TOTALES* - E.COLI* - BACT.HETEROTROFAS* - VIRUS"
+      }
+    },
+
+    {
+      "id": "aniones_clorito_clorato_nitratos",
+      "individual_a_token": {
+        "Clorito": "CLORITO",
+        "Clorato": "CLORATO",
+        "Nitratos": "NITRATOS",
+        "Nitritos": "NITRITOS",
+        "Bromato": "BROMATOS",
+        "Bromuro": "BROMATOS"
+      },
+      "tokens_a_grupo": {
+        "CLORITO": "CLORITO",
+        "CLORATO": "CLORATO",
+        "NITRATOS": "NITRATOS",
+        "NITRITOS": "NITRITOS",
+        "NITRATOS|NITRITOS": "NITRATOS - NITRITOS",
+        "CLORITO|CLORATO": "CLORITO - CLORATO ",
+        "CLORITO|CLORATO|BROMATOS": "CLORITO - CLORATO Y BROMATOS",
+        "CLORITO|CLORATO|NITRATOS|NITRITOS|BROMATOS": "CLORITO - CLORATO - NITRATOS - NITRITOS - BROMATOS"
+      }
+    },
+
+    {
+      "id": "cloruros_sulfatos_fluor",
+      "individual_a_token": {
+        "Cloruros": "CLORUROS",
+        "Sulfatos": "SULFATOS",
+        "Flúor": "FLUOR"
+      },
+      "tokens_a_grupo": {
+        "CLORUROS": "CLORUROS*",
+        "SULFATOS": "SULFATOS*",
+        "FLUOR": "FLUOR",
+        "CLORUROS|SULFATOS": "CLORUROS* - SULFATOS*",
+        "CLORUROS|SULFATOS|FLUOR": "CLORUROS - SULFATOS* - FLUOR"
+      }
+    },
+
+    {
+      "id": "campo_fisicoquimico",
+      "individual_a_token": {
+        "pH referencial": "PH",
+        "pH (MEDICION EN CAMPO)": "PH",
+        "Temperatura (medicion en campo)": "TEMP",
+        "Temperatura": "TEMP",
+        "Conductividad (25°C)": "COND",
+        "Conductividad (Medicion en Campo)": "COND",
+        "Turbidez": "TURB",
+        "Cloro Residual Libre": "CLORO",
+        "Cloro Residual Libre (Medición en campo)": "CLORO",
+        "Oxígeno Disuelto (valor mínimo)": "OD"
+      },
+      "tokens_a_grupo": {
+        "PH": "PH*",
+        "TEMP": "TEMPERATURA* (Campo)",
+        "COND": "CONDUCTIVIDAD*",
+        "TURB": "TURBIEDAD*",
+        "CLORO": "CLORO LIBRE",
+        "OD": "OXIGENO DIUELTO (O.D)",
+        "PH|TEMP": "PH* - TEMPERATURA*",
+        "PH|COND": "PH* - CONDUCTIVIDAD*",
+        "PH|CLORO": "PH* - CLORO LIBRE",
+        "PH|TEMP|COND": "PH* - TEMPERATURA* - CONDUCTIVIDAD",
+        "PH|TEMP|CLORO": "PH* - TEMPERATURA* - CLORO LIBRE (Campo)",
+        "PH|COND|CLORO": "PH* - CONDUCTIVIDAD* - CLORO LIBRE",
+        "PH|TEMP|COND|CLORO": "PH* - TEMPERATURA* - CONDUCTIVIDAD - CLORO LIBRE",
+        "PH|TEMP|COND|TURB|CLORO": "PH* - T° - CONDUCTIVIDAD - TURBIDEZ - CLORO LIBRE - O.D (Campo)",
+        "PH|TEMP|COND|TURB|CLORO|OD": "PH* - T° - CONDUCTIVIDAD - TURBIDEZ - CLORO LIBRE - O.D (Campo)"
+      }
+    },
+
+    {
+      "id": "color_olor_sabor",
+      "individual_a_token": {
+        "Color verdadero": "COLOR",
+        "Olor": "OLOR",
+        "Sabor": "SABOR"
+      },
+      "tokens_a_grupo": {
+        "COLOR": "COLOR VERDADERO",
+        "OLOR": "OLOR",
+        "SABOR": "SABOR",
+        "COLOR|OLOR": "COLOR - OLOR - SABOR",
+        "COLOR|SABOR": "COLOR - OLOR - SABOR",
+        "OLOR|SABOR": "COLOR - OLOR - SABOR",
+        "COLOR|OLOR|SABOR": "COLOR - OLOR - SABOR"
+      }
+    },
+
+    {
+      "id": "solidos",
+      "individual_a_token": {
+        "Sólidos totales disueltos": "TDS",
+        "Sólidos totales suspendidos": "TSS"
+      },
+      "tokens_a_grupo": {
+        "TDS": "SOLIDOS TOTALES DISUELTOS (TDS)*",
+        "TSS": "SOLIDOS SUSPENDIDOS TOTALES (TSS)*"
+      }
+    },
+
+    {
+      "id": "nitrogeno_kjeldahl",
+      "individual_a_token": {
+        "Nitrógeno total Kjeldahl": "NTK",
+        "Nitrógeno amoniacal": "NAMONIACAL"
+      },
+      "tokens_a_grupo": {
+        "NTK": "NITROGENO ORGANICO Kjeldahl",
+        "NAMONIACAL": "NITROGENO AMONIACAL*",
+        "NTK|NAMONIACAL": "NITROGENO TOTAL"
+      }
+    }
+  ]
+}

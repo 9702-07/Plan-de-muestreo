@@ -1,0 +1,6 @@
+
+  Plan de Muestreo — Generador
+  Abre tu navegador en: http://localhost:5003
+
+ * Serving Flask app 'app'
+ * Debug mode: off
