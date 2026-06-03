@@ -78,9 +78,23 @@ ORDEN_GRUPOS = [
     "TEMPERATURA* (Campo)",
 ]
 
+import tempfile as _tempfile
+
 PLANTILLA      = Path(__file__).resolve().parent / "COT2026-0103 - SOCOSANI S A.xlsm"
 MAPEO_PATH     = Path(__file__).resolve().parent / "mapeo_parametros.json"
 FAMILIAS_PATH  = Path(__file__).resolve().parent / "familias_parametros.json"
+
+def _dir_escribible(path: Path) -> Path:
+    """Devuelve el path si es escribible, o /tmp como fallback."""
+    try:
+        path.mkdir(exist_ok=True)
+        t = path / ".write_test"
+        t.touch(); t.unlink()
+        return path
+    except OSError:
+        fb = Path(_tempfile.gettempdir()) / "planes_generados"
+        fb.mkdir(exist_ok=True)
+        return fb
 
 
 def resolver_grupos(nombres_pdf: list[str], mapeo: dict) -> list[str]:
@@ -205,7 +219,7 @@ def generar_plan(
     overrides: dict | None = None,
     grupos_override: list | None = None,   # [{"grupo": str, "puntos": int}]
     control_calidad: list | None = None,   # [bk_c, bk_v, dup, dup_mb, bk_vm]
-) -> Path:
+) -> bytes:
     """
     Genera el Excel del plan de muestreo a partir del PDF de cotización.
 
@@ -250,15 +264,9 @@ def generar_plan(
         except (ValueError, TypeError):
             pass
 
-    # 4. Abrir plantilla y copiarla
-    if ruta_salida is None:
-        nro = nro_base(datos["nro_cotizacion"])
-        cliente = datos["razon_social"].replace(" ", "_")[:20]
-        nombre_archivo = f"PM_{nro}_{cliente}.xlsm"
-        ruta_salida = Path(ruta_pdf).parent / nombre_archivo
-
-    shutil.copy2(PLANTILLA, ruta_salida)
-    wb = openpyxl.load_workbook(ruta_salida, keep_vba=True)
+    # 4. Cargar la plantilla EN MEMORIA (sin copiar a disco — compatible con
+    #    entornos de solo lectura como Vercel/serverless).
+    wb = openpyxl.load_workbook(PLANTILLA, keep_vba=True)
     ws = wb["PLAN DE MUESTREO-AGUA"]
 
     # 5. Número de cotización (sin sufijo de revisión, con "/" como en la plantilla)
@@ -312,8 +320,23 @@ def generar_plan(
         for fila in filas_qc[len(control_calidad):]:
             ws.cell(row=fila, column=6).value = ""
 
-    wb.save(ruta_salida)
-    return Path(ruta_salida)
+    # 12. Guardar EN MEMORIA y devolver los bytes del .xlsm.
+    #     (No se escribe en disco salvo que se pida ruta_salida explícita.)
+    from io import BytesIO
+    buffer = BytesIO()
+    wb.save(buffer)
+    data = buffer.getvalue()
+
+    # Uso local / CLI: si se pidió guardar en disco, intentarlo sin romper si falla.
+    if ruta_salida is not None:
+        try:
+            destino = Path(ruta_salida)
+            destino = _dir_escribible(destino.parent) / destino.name
+            destino.write_bytes(data)
+        except OSError:
+            pass
+
+    return data
 
 
 # ─── Ejecución directa ────────────────────────────────────────────────────────
@@ -330,5 +353,6 @@ if __name__ == "__main__":
     lugar_muestreo = input("  Lugar de muestreo   : ").strip()
     fecha_inicio   = input("  Fecha inicio muestreo (dd/mm/yyyy): ").strip()
 
-    salida = generar_plan(ruta_pdf, preparado_por, lugar_muestreo, fecha_inicio)
-    print(f"\nPlan generado: {salida}")
+    nombre = f"PM_generado.xlsm"
+    generar_plan(ruta_pdf, preparado_por, lugar_muestreo, fecha_inicio, ruta_salida=nombre)
+    print(f"\nPlan generado: {nombre}")

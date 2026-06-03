@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Archivos temporales de Excel (lock files)
+~$*.xlsm
+~$*.xlsx
+
+# Planes generados (no deben subirse al repo)
+_planes_generados/
+
+# Logs y temporales
+error_log.txt
+output_log.txt
+*.tmp

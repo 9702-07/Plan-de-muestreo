@@ -17,11 +17,27 @@ from generar_plan import generar_plan, nro_base
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
+import tempfile
+
 BASE = Path(__file__).resolve().parent
-OUTPUT_DIR = BASE / "_planes_generados"
-OUTPUT_DIR.mkdir(exist_ok=True)
 MAPEO_PATH = BASE / "mapeo_parametros.json"
 PLANTILLA   = BASE / "COT2026-0103 - SOCOSANI S A.xlsm"
+
+# Usar _planes_generados junto al script; si el sistema es read-only, usar /tmp
+def _init_output_dir() -> Path:
+    candidate = BASE / "_planes_generados"
+    try:
+        candidate.mkdir(exist_ok=True)
+        test = candidate / ".write_test"
+        test.touch()
+        test.unlink()
+        return candidate
+    except OSError:
+        fallback = Path(tempfile.gettempdir()) / "planes_generados"
+        fallback.mkdir(exist_ok=True)
+        return fallback
+
+OUTPUT_DIR = _init_output_dir()
 
 
 def matrices_disponibles() -> list[str]:
@@ -563,15 +579,29 @@ function generarPlan() {
   fd.append('grupos_editados', JSON.stringify(gruposEditados));
 
   fetch('/generar',{method:'POST',body:fd})
-    .then(r=>r.json())
-    .then(data=>{
+    .then(async r=>{
       document.getElementById('btn-gen').disabled=false;
-      if(data.error){setStatus('error','Error: '+data.error);return}
+      const ct = r.headers.get('content-type') || '';
+      // Si la respuesta es JSON => es un error; si es binario => es el Excel
+      if(ct.includes('application/json')){
+        const data = await r.json();
+        setStatus('error','Error: '+(data.error||'No se pudo generar'));
+        return;
+      }
+      // Descargar el archivo directamente desde el blob
+      const blob = await r.blob();
+      let filename = 'PlanDeMuestreo.xlsm';
+      const cd = r.headers.get('content-disposition') || '';
+      const m = cd.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+      if(m) filename = decodeURIComponent(m[1].replace(/"/g,''));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       paso(3);
-      const guardados = data.nuevos_mapeos_guardados||0;
-      setStatus('success',
-        `Plan generado correctamente.${guardados>0?' Se guardaron '+guardados+' nuevo(s) mapeo(s).':''}<br>
-         <a class="dl-link" href="/descargar/${data.filename}">⬇ Descargar ${data.filename}</a>`);
+      setStatus('success', `Plan generado correctamente. Descargando <strong>${filename}</strong>…`);
     })
     .catch(e=>{document.getElementById('btn-gen').disabled=false;setStatus('error','Error: '+e.message)});
 }
@@ -679,49 +709,60 @@ def generar():
         nro = nro_base(datos["nro_cotizacion"])
         cliente = datos["razon_social"].replace(" ", "_")[:20]
         filename = f"PM_{nro}_{cliente}.xlsm"
-        ruta_salida = OUTPUT_DIR / filename
 
-        # Guardar nuevos mapeos en el JSON antes de generar
-        guardados = 0
+        # Guardar nuevos mapeos en el JSON (si el disco lo permite; en Vercel
+        # es de solo lectura, así que se ignora silenciosamente sin romper).
         if nuevos_mapeos:
-            with open(MAPEO_PATH, encoding="utf-8") as f:
-                mapeo = json.load(f)
-            for nombre, grupo in nuevos_mapeos.items():
-                if nombre not in mapeo or mapeo[nombre] != grupo:
-                    mapeo[nombre] = grupo
-                    guardados += 1
-            with open(MAPEO_PATH, "w", encoding="utf-8") as f:
-                json.dump(mapeo, f, ensure_ascii=False, indent=2)
+            try:
+                with open(MAPEO_PATH, encoding="utf-8") as f:
+                    mapeo = json.load(f)
+                for nombre, grupo in nuevos_mapeos.items():
+                    if nombre not in mapeo or mapeo[nombre] != grupo:
+                        mapeo[nombre] = grupo
+                with open(MAPEO_PATH, "w", encoding="utf-8") as f:
+                    json.dump(mapeo, f, ensure_ascii=False, indent=2)
+            except OSError:
+                pass  # entorno de solo lectura (Vercel): el mapeo no persiste
 
         muestreado_por = request.form.get("muestreado_por", "LABORATORIO")
-        grupos_editados_raw = request.form.get("grupos_editados", "[]")
-        grupos_override = json.loads(grupos_editados_raw) or None
+        grupos_override = json.loads(request.form.get("grupos_editados", "[]")) or None
         control_calidad = json.loads(request.form.get("control_calidad", "[]")) or None
 
-        salida = generar_plan(
+        # Generar el Excel EN MEMORIA (bytes) — sin escribir en disco
+        data = generar_plan(
             ruta_pdf=tmp_path,
             preparado_por=request.form.get("preparado_por", ""),
             lugar_muestreo=request.form.get("lugar_muestreo", ""),
             fecha_inicio=request.form.get("fecha_inicio", ""),
             observaciones=request.form.get("observaciones", ""),
             muestreado_por=muestreado_por,
-            ruta_salida=str(ruta_salida),
             overrides=overrides,
             grupos_override=grupos_override,
             control_calidad=control_calidad,
         )
-        return jsonify({"filename": salida.name, "nuevos_mapeos_guardados": guardados})
-    except Exception as e:
+
+        # Devolver el archivo directamente para descarga (funciona en Vercel)
+        from io import BytesIO
+        return send_file(
+            BytesIO(data),
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.ms-excel.sheet.macroenabled.12",
+        )
+    except Exception:
         import traceback
-        return jsonify({"error": traceback.format_exc()})
+        return jsonify({"error": traceback.format_exc()}), 500
     finally:
         os.unlink(tmp_path)
 
 
 @app.route("/descargar/<filename>")
 def descargar(filename):
-    ruta = OUTPUT_DIR / filename
-    if not ruta.exists():
+    # Buscar en directorio principal y en fallback /tmp
+    candidatos = [OUTPUT_DIR / filename,
+                  Path(tempfile.gettempdir()) / "planes_generados" / filename]
+    ruta = next((p for p in candidatos if p.exists()), None)
+    if ruta is None:
         return "Archivo no encontrado", 404
     return send_file(str(ruta), as_attachment=True, download_name=filename,
                      mimetype="application/vnd.ms-excel.sheet.macroenabled.12")
