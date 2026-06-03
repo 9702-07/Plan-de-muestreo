@@ -208,6 +208,88 @@ def extraer_n_puntos(info_adicional: str) -> int:
     return 1
 
 
+def _leer_parametros_full(wb) -> dict:
+    """Lee la hoja PARAMETROS → {nombre: {2:envase, 3:volumen, 4:colD, 5:colE, 6:QC, 7:colG}}."""
+    ws = wb["PARAMETROS"]
+    info = {}
+    for row in ws.iter_rows(min_row=2, max_row=400):
+        nombre = row[0].value
+        if nombre and str(nombre).strip():
+            info[str(nombre).strip()] = {
+                2: row[1].value, 3: row[2].value, 4: row[3].value,
+                5: row[4].value, 6: row[5].value, 7: row[6].value,
+            }
+    return info
+
+
+def _buscar(info: dict, nombre) -> dict | None:
+    """Busca un grupo en PARAMETROS (match exacto y luego sin espacios)."""
+    if not nombre:
+        return None
+    clave = str(nombre).strip()
+    if clave in info:
+        return info[clave]
+    for k, v in info.items():
+        if k.strip() == clave:
+            return v
+    return None
+
+
+def _factor_qc(puntos) -> int:
+    """Factor de control de calidad según cantidad de puntos (igual que la fórmula)."""
+    try:
+        p = int(puntos)
+    except (TypeError, ValueError):
+        p = 0
+    return 1 if p <= 20 else 2 if p <= 40 else 3 if p <= 60 else 4
+
+
+def _rellenar_valores_lookup(wb, ws) -> None:
+    """
+    Reemplaza las fórmulas VLOOKUP por VALORES calculados, para que siempre
+    se muestren (sin depender del recálculo de Excel). Columnas según plantilla:
+      Filas de parámetros (17-47): nombre en B(2)
+        R(18)=envase, S(19)=volumen, V(22)=colE, W(23)=colD,
+        Z(26)=QC*factor(P16), AB(28)=colG
+      Filas de control de calidad (77-81): nombre en F(6)
+        R(18)=envase, V(22)=volumen, Y(25)=colE, AB(28)=colD
+    """
+    info = _leer_parametros_full(wb)
+
+    # --- Filas de parámetros 17-47 ---
+    for row in range(17, 48):
+        nombre = ws.cell(row=row, column=2).value
+        datos_p = _buscar(info, nombre) if nombre and str(nombre).strip() else None
+        if datos_p:
+            ws.cell(row=row, column=18).value = datos_p[2]   # R envase
+            ws.cell(row=row, column=19).value = datos_p[3]   # S volumen
+            ws.cell(row=row, column=22).value = datos_p[5]   # V col E
+            ws.cell(row=row, column=23).value = datos_p[4]   # W col D
+            ws.cell(row=row, column=28).value = datos_p[7]   # AB col G
+            # Z control de calidad = QC * factor(puntos)
+            qc = datos_p[6]
+            try:
+                ws.cell(row=row, column=26).value = int(qc) * _factor_qc(ws.cell(row=row, column=16).value)
+            except (TypeError, ValueError):
+                ws.cell(row=row, column=26).value = ""
+        else:
+            for col in (18, 19, 22, 23, 26, 28):
+                ws.cell(row=row, column=col).value = ""
+
+    # --- Filas de control de calidad 77-81 ---
+    for row in range(77, 82):
+        nombre = ws.cell(row=row, column=6).value
+        datos_p = _buscar(info, nombre) if nombre and str(nombre).strip() else None
+        if datos_p:
+            ws.cell(row=row, column=18).value = datos_p[2]   # R envase
+            ws.cell(row=row, column=22).value = datos_p[3]   # V volumen
+            ws.cell(row=row, column=25).value = datos_p[5]   # Y col E
+            ws.cell(row=row, column=28).value = datos_p[4]   # AB col D
+        else:
+            for col in (18, 22, 25, 28):
+                ws.cell(row=row, column=col).value = ""
+
+
 def generar_plan(
     ruta_pdf: str,
     preparado_por: str,
@@ -310,15 +392,17 @@ def generar_plan(
     ws["A49"] = obs
 
     # 11. Sistema de Control de Calidad (filas 77-81, columna F = col 6).
-    #     Se escriben los parámetros que el usuario escogió en la interfaz.
-    #     Las fórmulas VLOOKUP del Excel completan envase/volumen/preservación.
     if control_calidad:
         filas_qc = [77, 78, 79, 80, 81]  # BK-C, BK-V, Dup, Dup-MB, BK-VM
         for fila, valor in zip(filas_qc, control_calidad):
             ws.cell(row=fila, column=6).value = (valor or "").strip()
-        # Limpiar renglones no provistos
         for fila in filas_qc[len(control_calidad):]:
             ws.cell(row=fila, column=6).value = ""
+
+    # 11.b CALCULAR los valores de envase/volumen/preservación/control de calidad
+    #      en Python y escribirlos como VALORES (no fórmulas). Así aparecen siempre,
+    #      sin depender de que Excel recalcule los VLOOKUP al abrir.
+    _rellenar_valores_lookup(wb, ws)
 
     # 12. Guardar EN MEMORIA y devolver los bytes del .xlsm.
     #     (No se escribe en disco salvo que se pida ruta_salida explícita.)
